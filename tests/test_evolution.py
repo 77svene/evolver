@@ -7,7 +7,7 @@ def test_genome_mutation():
     # Force mutation
     mutated = genome.mutate(mutation_rate=1.0)
     assert mutated.genome_id != genome.genome_id
-    assert mutated.lineage == [genome.genome_id]
+    assert mutated.lineage == [genome.cryptographic_hash]
 
     # Assert parameters changed
     assert mutated.genes["budget_allocation"] != genome.genes["budget_allocation"]
@@ -19,7 +19,7 @@ def test_genome_crossover():
     child = genome1.crossover(genome2)
     assert child.genome_id != genome1.genome_id
     assert child.genome_id != genome2.genome_id
-    assert child.lineage == [genome1.genome_id, genome2.genome_id]
+    assert child.lineage == [genome1.cryptographic_hash, genome2.cryptographic_hash]
     assert child.genes["budget_allocation"] in [100.0, 200.0]
     assert child.genes["adaptation_rate"] in [0.05, 0.1]
 

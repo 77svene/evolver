@@ -7,11 +7,12 @@ class PromptChainer:
         self.endpoint_url = endpoint_url
         self.client = httpx.AsyncClient()
 
-    async def _call_llm(self, prompt: str) -> str:
+    async def _call_llm(self, prompt: str, timeout: float = 60.0) -> str:
         try:
             response = await self.client.post(
                 f"{self.endpoint_url}/generate",
-                json={"prompt": prompt, "max_tokens": 512, "temperature": 0.7}
+                json={"prompt": prompt, "max_tokens": 1024, "temperature": 0.3},
+                timeout=timeout
             )
             response.raise_for_status()
             data = response.json()

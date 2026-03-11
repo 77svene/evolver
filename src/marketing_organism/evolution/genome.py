@@ -1,10 +1,12 @@
 import uuid
 import random
 import copy
+import hashlib
+import json
 from typing import Dict, Any
 
 class StrategyGenome:
-    def __init__(self, parameters: Dict[str, Any] = None):
+    def __init__(self, parameters: Dict[str, Any] = None, lineage: list = None):
         self.genome_id = str(uuid.uuid4())
         self.parameters = parameters or {}
         # Core genes representation
@@ -15,7 +17,17 @@ class StrategyGenome:
             "adaptation_rate": self.parameters.get("adaptation_rate", 0.05)
         }
         self.fitness_history = []
-        self.lineage = []
+        self.lineage = lineage or []
+        self.cryptographic_hash = self._compute_hash()
+
+    def _compute_hash(self) -> str:
+        data = {
+            "genome_id": self.genome_id,
+            "genes": self.genes,
+            "lineage": self.lineage
+        }
+        encoded = json.dumps(data, sort_keys=True).encode('utf-8')
+        return hashlib.sha256(encoded).hexdigest()
 
     def mutate(self, mutation_rate: float = 0.1):
         """Randomly alters a subset of parameters."""
@@ -32,8 +44,7 @@ class StrategyGenome:
         if random.random() < mutation_rate:
             mutated_genes["adaptation_rate"] = max(0.01, mutated_genes["adaptation_rate"] + random.uniform(-0.02, 0.02))
 
-        offspring = StrategyGenome(parameters=mutated_genes)
-        offspring.lineage = self.lineage + [self.genome_id]
+        offspring = StrategyGenome(parameters=mutated_genes, lineage=self.lineage + [self.cryptographic_hash])
         return offspring
 
     def crossover(self, other_genome: 'StrategyGenome') -> 'StrategyGenome':
@@ -47,8 +58,7 @@ class StrategyGenome:
             else:
                 child_genes[key] = copy.deepcopy(other_genome.genes[key])
 
-        offspring = StrategyGenome(parameters=child_genes)
-        offspring.lineage = [self.genome_id, other_genome.genome_id]
+        offspring = StrategyGenome(parameters=child_genes, lineage=[self.cryptographic_hash, other_genome.cryptographic_hash])
         return offspring
 
     def update_fitness(self, score: float):

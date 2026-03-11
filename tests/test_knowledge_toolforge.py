@@ -27,14 +27,15 @@ async def test_knowledge_graph():
     assert len(campaigns) == 1
     assert campaigns[0]["id"] == "entity1"
 
-def test_tool_generator(tmp_path):
+@pytest.mark.asyncio
+async def test_tool_generator(tmp_path):
     generator = ToolGenerator(workspace_path=str(tmp_path))
 
     gap_description = "Need to parse unstructured social media text"
 
     # We will patch analyze_gap so the uuid generated matches during test
     original_analyze_gap = generator.analyze_gap
-    def mock_analyze(gap):
+    async def mock_analyze(gap):
         return {
             "name": f"tool_mocked123",
             "type": "python",
@@ -42,10 +43,10 @@ def test_tool_generator(tmp_path):
         }
     generator.analyze_gap = mock_analyze
 
-    spec = generator.analyze_gap(gap_description)
+    spec = await generator.analyze_gap(gap_description)
     assert spec["name"].startswith("tool_")
 
-    filepath = generator.generate_tool(gap_description)
+    filepath = await generator.generate_tool(gap_description)
     assert filepath.endswith(".py")
     assert os.path.exists(filepath)
 

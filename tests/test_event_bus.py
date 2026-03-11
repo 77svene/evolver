@@ -31,6 +31,16 @@ async def test_event_bus():
     assert received_events[0][0] == "test.event1"
     assert received_events[0][1].id == event1.id
 
+def test_event_cryptographic_hash():
+    event1 = CustomTestEvent(source="test", metadata={"key": "val"})
+    assert event1.cryptographic_hash is not None
+    assert len(event1.cryptographic_hash) == 64
+
+    # Same event data should yield same hash
+    import copy
+    event2 = CustomTestEvent(id=event1.id, timestamp=event1.timestamp, source=event1.source, metadata=event1.metadata, metric="test", value=1.0)
+    assert event1.cryptographic_hash == event2.cryptographic_hash
+
 @pytest.mark.asyncio
 async def test_dlq_on_error():
     bus = EventBus()
