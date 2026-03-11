@@ -27,9 +27,10 @@ class TopicRouter:
         return callbacks
 
 class EventBus:
-    def __init__(self):
+    def __init__(self, dlq_max_size: int = 1000):
         self.router = TopicRouter()
         self.queue = asyncio.Queue()
+        self.dlq = asyncio.Queue(maxsize=dlq_max_size)
         self._running = False
         self._task = None
 
@@ -53,13 +54,27 @@ class EventBus:
                     tasks = []
                     for cb in callbacks:
                         if asyncio.iscoroutinefunction(cb):
-                            tasks.append(asyncio.create_task(cb(topic, event)))
+                            # Wrap async callbacks to catch exceptions individually and send to DLQ
+                            async def safe_cb(callback=cb, t=topic, e=event):
+                                try:
+                                    await callback(t, e)
+                                except Exception as err:
+                                    print(f"Error executing async callback for {t}: {err}")
+                                    try:
+                                        self.dlq.put_nowait((t, e, str(err)))
+                                    except asyncio.QueueFull:
+                                        pass
+                            tasks.append(asyncio.create_task(safe_cb()))
                         else:
                             # If sync callback, just call it directly
                             try:
                                 cb(topic, event)
                             except Exception as e:
                                 print(f"Error executing sync callback for {topic}: {e}")
+                                try:
+                                    self.dlq.put_nowait((topic, event, str(e)))
+                                except asyncio.QueueFull:
+                                    pass
 
                     if tasks:
                         await asyncio.gather(*tasks, return_exceptions=True)
@@ -69,6 +84,11 @@ class EventBus:
                 break
             except Exception as e:
                 print(f"Error in event bus loop: {e}")
+                # Send totally failed items to DLQ if possible
+                try:
+                    self.dlq.put_nowait(("unknown_topic", None, str(e)))
+                except (asyncio.QueueFull, NameError):
+                    pass
 
     def start(self):
         if not self._running:

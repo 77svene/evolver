@@ -49,7 +49,26 @@ def test_evolutionary_selector():
     # Spawn new generation
     selector.spawn_generation()
     assert selector.generation == 1
-    # We started with 2 surviving, after spawning we should have 2 parents + children
-    # to make up for the 1 that died off. Actually length depends on len(self.population) at spawn time
-    # so we had 2. Parents length is 1. We make 2 - 1 = 1 child. Total = 3
     assert len(selector.population) >= 2
+
+def test_evolutionary_diversity():
+    selector = EvolutionarySelector()
+
+    # 3 identical genomes, 1 distinct genome
+    g1 = StrategyGenome(parameters={"objective_weights": [1.0, 1.0, 1.0]})
+    g2 = StrategyGenome(parameters={"objective_weights": [1.0, 1.0, 1.0]})
+    g3 = StrategyGenome(parameters={"objective_weights": [1.0, 1.0, 1.0]})
+
+    # This one is very structurally different
+    g4_distinct = StrategyGenome(parameters={"objective_weights": [10.0, 10.0, 10.0]})
+
+    selector.add_genome(g1)
+    selector.add_genome(g2)
+    selector.add_genome(g3)
+    selector.add_genome(g4_distinct)
+
+    div_1 = selector.calculate_diversity_score(g1)
+    div_4 = selector.calculate_diversity_score(g4_distinct)
+
+    # Distinct genome should have a much higher diversity score
+    assert div_4 > div_1

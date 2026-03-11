@@ -59,7 +59,27 @@ if __name__ == "__main__":
             # Check compilation
             import py_compile
             py_compile.compile(filepath, doraise=True)
+
+            # Static AST analysis for unsafe operations
+            import ast
+            with open(filepath, "r") as f:
+                tree = ast.parse(f.read())
+
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name in ("os", "subprocess", "sys"):
+                            logging.warning(f"Unsafe import '{alias.name}' found in {filepath}")
+                            return False
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module in ("os", "subprocess", "sys"):
+                        logging.warning(f"Unsafe import from '{node.module}' found in {filepath}")
+                        return False
+
             return True
         except py_compile.PyCompileError as e:
             logging.error(f"Tool compilation failed for {filepath}: {e}")
+            return False
+        except SyntaxError as e:
+            logging.error(f"Syntax error during AST parsing for {filepath}: {e}")
             return False

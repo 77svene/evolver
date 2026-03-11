@@ -1,5 +1,6 @@
 import json
 import logging
+import asyncio
 from typing import Dict, Any, List
 
 class KnowledgeGraph:
@@ -8,45 +9,51 @@ class KnowledgeGraph:
         self.db_path = db_path
         self._graph_store: Dict[str, Dict[str, Any]] = {}
         self._edges: Dict[str, List[Dict[str, Any]]] = {}
+        self._lock = asyncio.Lock()
 
         # Load from disk if not purely in-memory
         if not self.in_memory and self.db_path:
             self._load()
 
-    def store_entity(self, entity_id: str, data: Dict[str, Any]):
+    async def store_entity(self, entity_id: str, data: Dict[str, Any]):
         """Creates or updates a graph node."""
-        self._graph_store[entity_id] = data
-        if not self.in_memory:
-            self._save()
+        async with self._lock:
+            self._graph_store[entity_id] = data
+            if not self.in_memory:
+                self._save()
 
-    def get_entity(self, entity_id: str) -> Dict[str, Any]:
-        return self._graph_store.get(entity_id, {})
+    async def get_entity(self, entity_id: str) -> Dict[str, Any]:
+        async with self._lock:
+            return self._graph_store.get(entity_id, {})
 
-    def add_relationship(self, source_id: str, target_id: str, relationship_type: str, weight: float = 1.0):
+    async def add_relationship(self, source_id: str, target_id: str, relationship_type: str, weight: float = 1.0):
         """Creates an edge between two entities."""
-        if source_id not in self._edges:
-            self._edges[source_id] = []
+        async with self._lock:
+            if source_id not in self._edges:
+                self._edges[source_id] = []
 
-        edge = {
-            "target": target_id,
-            "type": relationship_type,
-            "weight": weight
-        }
-        self._edges[source_id].append(edge)
-        if not self.in_memory:
-            self._save()
+            edge = {
+                "target": target_id,
+                "type": relationship_type,
+                "weight": weight
+            }
+            self._edges[source_id].append(edge)
+            if not self.in_memory:
+                self._save()
 
-    def query_relations(self, source_id: str) -> List[Dict[str, Any]]:
+    async def query_relations(self, source_id: str) -> List[Dict[str, Any]]:
         """Returns all connected edges from a node."""
-        return self._edges.get(source_id, [])
+        async with self._lock:
+            return self._edges.get(source_id, [])
 
-    def query_by_type(self, entity_type: str) -> List[Dict[str, Any]]:
+    async def query_by_type(self, entity_type: str) -> List[Dict[str, Any]]:
         """Finds entities by their 'type' attribute."""
-        results = []
-        for e_id, data in self._graph_store.items():
-            if data.get("type") == entity_type:
-                results.append({"id": e_id, **data})
-        return results
+        async with self._lock:
+            results = []
+            for e_id, data in self._graph_store.items():
+                if data.get("type") == entity_type:
+                    results.append({"id": e_id, **data})
+            return results
 
     def _save(self):
         try:

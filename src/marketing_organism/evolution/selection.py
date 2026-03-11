@@ -18,15 +18,40 @@ class EvolutionarySelector:
             genome.update_fitness(metric)
             self.performance_metrics[genome_id] = genome.current_fitness
 
-    def reallocate_resources(self, min_threshold: float = 0.3):
-        """Eliminates low-performing strategies and reallocates resources to high performers."""
+    def calculate_diversity_score(self, target_genome: StrategyGenome) -> float:
+        """Calculates how unique a genome is compared to the rest of the population."""
+        if len(self.population) <= 1:
+            return 1.0
+
+        diversity_sum = 0.0
+        for genome_id, other_genome in self.population.items():
+            if genome_id == target_genome.genome_id:
+                continue
+
+            # Simple Euclidean distance equivalent for objective_weights to represent structural diversity
+            target_weights = target_genome.genes.get("objective_weights", [])
+            other_weights = other_genome.genes.get("objective_weights", [])
+
+            if len(target_weights) == len(other_weights) and len(target_weights) > 0:
+                dist = sum((a - b) ** 2 for a, b in zip(target_weights, other_weights)) ** 0.5
+                diversity_sum += dist
+
+        return diversity_sum / (len(self.population) - 1)
+
+    def reallocate_resources(self, min_threshold: float = 0.3, diversity_weight: float = 0.2):
+        """Eliminates low-performing strategies, retaining those that preserve diversity."""
+        def combined_score(genome):
+            fitness = genome.current_fitness
+            diversity = self.calculate_diversity_score(genome)
+            return (fitness * (1 - diversity_weight)) + (diversity * diversity_weight)
+
         ranked_genomes = sorted(
             self.population.items(),
-            key=lambda x: x[1].current_fitness,
+            key=lambda x: combined_score(x[1]),
             reverse=True
         )
 
-        underperforming = [g_id for g_id, genome in ranked_genomes if genome.current_fitness < min_threshold and len(genome.fitness_history) >= 5]
+        underperforming = [g_id for g_id, genome in ranked_genomes if combined_score(genome) < min_threshold and len(genome.fitness_history) >= 5]
 
         for g_id in underperforming:
             # Terminate and remove
@@ -36,14 +61,19 @@ class EvolutionarySelector:
 
         # In a full system, you would proportionally map the remaining genomes to available resources
 
-    def spawn_generation(self, mutation_rate: float = 0.1, crossover_prob: float = 0.3):
+    def spawn_generation(self, mutation_rate: float = 0.1, crossover_prob: float = 0.3, diversity_weight: float = 0.2):
         """Create a new generation from top performers via mutation and crossover."""
         if not self.population:
             return
 
+        def combined_score(genome):
+            fitness = genome.current_fitness
+            diversity = self.calculate_diversity_score(genome)
+            return (fitness * (1 - diversity_weight)) + (diversity * diversity_weight)
+
         ranked_genomes = sorted(
             self.population.values(),
-            key=lambda g: g.current_fitness,
+            key=lambda g: combined_score(g),
             reverse=True
         )
 

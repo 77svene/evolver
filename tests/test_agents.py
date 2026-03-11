@@ -42,6 +42,19 @@ async def test_agent_lifecycle():
     assert agent.agent_id not in manager.active_agents
 
 @pytest.mark.asyncio
+async def test_memory_eviction():
+    manager = AgentManager()
+    agent = manager.spawn_agent(DummyAgent)
+    agent.max_memory_events = 5
+
+    # We will bypass normal loop processing to just test memory appending
+    for _ in range(10):
+        event = CustomTestEvent(source="test", metadata={})
+        agent._process_event(event)
+
+    assert len(agent.memory["recent_events"]) == 5
+
+@pytest.mark.asyncio
 async def test_evaluate_agents():
     manager = AgentManager()
     agent1 = manager.spawn_agent(DummyAgent)

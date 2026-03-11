@@ -4,13 +4,15 @@ from typing import Dict, Any, List
 import uuid
 
 class BaseAgent(ABC):
-    def __init__(self, agent_id: str = None):
+    def __init__(self, agent_id: str = None, max_memory_events: int = 100):
         self.agent_id = agent_id or str(uuid.uuid4())
         self.memory: Dict[str, Any] = {}
         self.state: str = "initialized"
         self._running = False
         self._task = None
         self.event_queue = asyncio.Queue()
+        self.max_memory_events = max_memory_events
+        self._consecutive_errors = 0
 
     async def perceive(self, event):
         """Called by event bus when subscribed events occur."""
@@ -46,12 +48,15 @@ class BaseAgent(ABC):
                 if action:
                     await self.act(action)
 
+                self._consecutive_errors = 0  # reset on success
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                print(f"Error in agent loop for {self.agent_id}: {e}")
-                # Fallback to prevent tight loop errors
-                await asyncio.sleep(1)
+                self._consecutive_errors += 1
+                backoff_time = min(60, (2 ** self._consecutive_errors))
+                print(f"Error in agent loop for {self.agent_id}: {e}. Backing off for {backoff_time}s")
+                await asyncio.sleep(backoff_time)
 
     def _process_event(self, event):
         """Internal method to update memory based on perceived event."""
@@ -59,8 +64,10 @@ class BaseAgent(ABC):
         if "recent_events" not in self.memory:
             self.memory["recent_events"] = []
         self.memory["recent_events"].append(event)
-        # Keep last 100 events
-        self.memory["recent_events"] = self.memory["recent_events"][-100:]
+
+        # Enforce memory eviction policy (FIFO based on configured limit)
+        if len(self.memory["recent_events"]) > self.max_memory_events:
+            self.memory["recent_events"] = self.memory["recent_events"][-self.max_memory_events:]
 
     def start(self):
         if not self._running:

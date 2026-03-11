@@ -4,22 +4,26 @@ from src.marketing_organism.tool_forge.generator import ToolGenerator
 import os
 import uuid
 
-def test_knowledge_graph():
+@pytest.mark.asyncio
+async def test_knowledge_graph():
     kg = KnowledgeGraph(in_memory=True)
-    kg.store_entity("entity1", {"name": "Node A", "type": "campaign"})
-    kg.store_entity("entity2", {"name": "Node B", "type": "audience"})
+    await kg.store_entity("entity1", {"name": "Node A", "type": "campaign"})
+    await kg.store_entity("entity2", {"name": "Node B", "type": "audience"})
 
-    assert kg.get_entity("entity1")["name"] == "Node A"
-    assert kg.get_entity("entity2")["type"] == "audience"
+    e1 = await kg.get_entity("entity1")
+    e2 = await kg.get_entity("entity2")
 
-    kg.add_relationship("entity1", "entity2", "targets")
+    assert e1["name"] == "Node A"
+    assert e2["type"] == "audience"
 
-    relations = kg.query_relations("entity1")
+    await kg.add_relationship("entity1", "entity2", "targets")
+
+    relations = await kg.query_relations("entity1")
     assert len(relations) == 1
     assert relations[0]["target"] == "entity2"
     assert relations[0]["type"] == "targets"
 
-    campaigns = kg.query_by_type("campaign")
+    campaigns = await kg.query_by_type("campaign")
     assert len(campaigns) == 1
     assert campaigns[0]["id"] == "entity1"
 
@@ -50,6 +54,16 @@ def test_tool_generator(tmp_path):
         assert gap_description in content
         assert spec["name"] in content
 
-    # Optional compilation validation mock
-    import py_compile
-    assert py_compile.compile(filepath) is not None
+    assert generator.validate_tool(filepath) is True
+
+    # Test AST Unsafe scanner
+    unsafe_code = """
+import os
+def bad_tool():
+    os.system("rm -rf /")
+"""
+    unsafe_filepath = os.path.join(generator.workspace_path, "tool_unsafe.py")
+    with open(unsafe_filepath, "w") as f:
+        f.write(unsafe_code)
+
+    assert generator.validate_tool(unsafe_filepath) is False
