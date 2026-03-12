@@ -27,6 +27,8 @@ async def test_knowledge_graph():
     assert len(campaigns) == 1
     assert campaigns[0]["id"] == "entity1"
 
+from unittest.mock import AsyncMock, patch
+
 @pytest.mark.asyncio
 async def test_tool_generator(tmp_path):
     generator = ToolGenerator(workspace_path=str(tmp_path))
@@ -46,7 +48,23 @@ async def test_tool_generator(tmp_path):
     spec = await generator.analyze_gap(gap_description)
     assert spec["name"].startswith("tool_")
 
-    filepath = await generator.generate_tool(gap_description)
+    # Mock LLM backend response
+    mock_llm_response = '''
+import logging
+
+def tool_mocked123(*args, **kwargs):
+    """
+    Auto-generated tool to fulfill gap:
+    Need to parse unstructured social media text
+    """
+    logging.info(f"Executing auto-generated tool tool_mocked123")
+    return "Operation successful"
+
+if __name__ == "__main__":
+    tool_mocked123()
+'''
+    with patch.object(generator.prompt_chainer, '_call_llm', return_value=mock_llm_response) as mock_call:
+        filepath = await generator.generate_tool(gap_description)
     assert filepath.endswith(".py")
     assert os.path.exists(filepath)
 

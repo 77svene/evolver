@@ -2,6 +2,11 @@ from abc import ABC, abstractmethod
 import asyncio
 from typing import Dict, Any, List
 import uuid
+import logging
+
+from src.marketing_organism.exceptions import AgentExecutionError
+
+logger = logging.getLogger(__name__)
 
 class BaseAgent(ABC):
     def __init__(self, agent_id: str = None, max_memory_events: int = 100):
@@ -55,7 +60,10 @@ class BaseAgent(ABC):
             except Exception as e:
                 self._consecutive_errors += 1
                 backoff_time = min(60, (2 ** self._consecutive_errors))
-                print(f"Error in agent loop for {self.agent_id}: {e}. Backing off for {backoff_time}s")
+                logger.error(
+                    f"AgentExecutionError: Error in agent loop for {self.agent_id}: {e}. Backing off for {backoff_time}s",
+                    exc_info=True
+                )
                 await asyncio.sleep(backoff_time)
 
     def _process_event(self, event):

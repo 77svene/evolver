@@ -1,20 +1,40 @@
+"""Dynamic tool generation module resolving capability gaps in the ecosystem."""
+
 import logging
 import uuid
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from src.marketing_organism.llm.reasoning import PromptChainer
+from src.marketing_organism.exceptions import ToolGenerationError
+
+logger = logging.getLogger(__name__)
 
 class ToolGenerator:
-    def __init__(self, workspace_path: str = "./generated_tools", prompt_chainer: PromptChainer = None):
+    """Automates creation and validation of new tool capabilities via LLM."""
+
+    def __init__(self, workspace_path: str = "./generated_tools", prompt_chainer: Optional[PromptChainer] = None) -> None:
+        """Initializes the ToolGenerator.
+
+        Args:
+            workspace_path: Path to the directory where generated tools are saved.
+            prompt_chainer: Optional PromptChainer instance to use for code synthesis.
+        """
         self.workspace_path = workspace_path
         self.prompt_chainer = prompt_chainer or PromptChainer()
         if not os.path.exists(workspace_path):
             os.makedirs(workspace_path)
 
     async def analyze_gap(self, gap_description: str) -> Dict[str, Any]:
-        """Analyzes a capability gap and outlines a tool spec."""
-        logging.info(f"Analyzing capability gap: {gap_description}")
+        """Analyzes a capability gap and outlines a tool spec.
+
+        Args:
+            gap_description: A description of the missing system capability.
+
+        Returns:
+            A dictionary containing the generated specification details.
+        """
+        logger.info(f"Analyzing capability gap: {gap_description}")
         return {
             "name": f"tool_{uuid.uuid4().hex[:8]}",
             "type": "python",
@@ -22,7 +42,17 @@ class ToolGenerator:
         }
 
     async def generate_tool(self, gap_description: str) -> str:
-        """Returns the file path of the newly generated tool."""
+        """Synthesizes a tool script dynamically using the LLM prompt chainer.
+
+        Args:
+            gap_description: Description of the functionality the tool should implement.
+
+        Returns:
+            The filepath of the newly generated tool.
+
+        Raises:
+            ToolGenerationError: If file writing fails.
+        """
         spec = await self.analyze_gap(gap_description)
         tool_name = spec["name"]
 
@@ -66,16 +96,24 @@ if __name__ == "__main__":
 
         filepath = os.path.join(self.workspace_path, f"{tool_name}.py")
         try:
-            with open(filepath, "w") as f:
+            with open(filepath, "w", encoding="utf-8") as f:
                 f.write(generated_code)
-            logging.info(f"Tool {tool_name} successfully generated at {filepath}")
+            logger.info(f"Tool {tool_name} successfully generated at {filepath}")
             return filepath
         except Exception as e:
-            logging.error(f"Failed to generate tool {tool_name}: {e}")
-            return ""
+            error_msg = f"Failed to generate tool {tool_name}: {e}"
+            logger.error(error_msg, exc_info=True)
+            raise ToolGenerationError(error_msg) from e
 
     def validate_tool(self, filepath: str) -> bool:
-        """Runs basic syntactic and static analysis on generated tools."""
+        """Runs basic syntactic and static analysis on generated tools.
+
+        Args:
+            filepath: The location of the generated script.
+
+        Returns:
+            True if the tool passes static analysis constraints, False otherwise.
+        """
         if not os.path.exists(filepath):
             return False
 
@@ -93,17 +131,17 @@ if __name__ == "__main__":
                 if isinstance(node, ast.Import):
                     for alias in node.names:
                         if alias.name in ("os", "subprocess", "sys"):
-                            logging.warning(f"Unsafe import '{alias.name}' found in {filepath}")
+                            logger.warning(f"ToolGenerationError: Unsafe import '{alias.name}' found in {filepath}")
                             return False
                 elif isinstance(node, ast.ImportFrom):
                     if node.module in ("os", "subprocess", "sys"):
-                        logging.warning(f"Unsafe import from '{node.module}' found in {filepath}")
+                        logger.warning(f"ToolGenerationError: Unsafe import from '{node.module}' found in {filepath}")
                         return False
 
             return True
         except py_compile.PyCompileError as e:
-            logging.error(f"Tool compilation failed for {filepath}: {e}")
+            logger.error(f"ToolGenerationError: Tool compilation failed for {filepath}: {e}")
             return False
         except SyntaxError as e:
-            logging.error(f"Syntax error during AST parsing for {filepath}: {e}")
+            logger.error(f"ToolGenerationError: Syntax error during AST parsing for {filepath}: {e}")
             return False

@@ -2,9 +2,43 @@ import json
 import logging
 import asyncio
 import sqlite3
+from abc import ABC, abstractmethod
 from typing import Dict, Any, List
 
-class KnowledgeGraph:
+logger = logging.getLogger(__name__)
+
+class BaseKnowledgeGraph(ABC):
+    """Abstract Base Class defining the interface for persistent knowledge storage."""
+
+    @abstractmethod
+    async def store_entity(self, entity_id: str, data: Dict[str, Any]) -> None:
+        """Creates or updates a graph node."""
+        pass
+
+    @abstractmethod
+    async def get_entity(self, entity_id: str) -> Dict[str, Any]:
+        """Retrieves a graph node by ID."""
+        pass
+
+    @abstractmethod
+    async def add_relationship(self, source_id: str, target_id: str, relationship_type: str, weight: float = 1.0) -> None:
+        """Creates an edge between two entities."""
+        pass
+
+    @abstractmethod
+    async def query_relations(self, source_id: str) -> List[Dict[str, Any]]:
+        """Returns all connected edges from a node."""
+        pass
+
+    @abstractmethod
+    async def query_by_type(self, entity_type: str) -> List[Dict[str, Any]]:
+        """Finds entities by their 'type' attribute."""
+        pass
+
+
+class KnowledgeGraph(BaseKnowledgeGraph):
+    """SQLite-backed implementation of the Knowledge Graph."""
+
     def __init__(self, in_memory: bool = True, db_path: str = None):
         self.in_memory = in_memory
         self.db_path = db_path if not in_memory and db_path else ":memory:"

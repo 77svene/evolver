@@ -16,35 +16,31 @@ async def test_llm_service():
         assert response.status_code == 200
         assert "mocked" in response.json()["generated_text"].lower()
 
+from unittest.mock import AsyncMock, patch
+
+from unittest.mock import AsyncMock, patch, MagicMock
+
 @pytest.mark.asyncio
 async def test_prompt_chainer():
-    # We will mock httpx.AsyncClient.post to avoid actually spinning up the server
-    # and relying on port availability during tests
     chainer = PromptChainer(endpoint_url="http://127.0.0.1:8001")
 
-    class MockResponse:
-        def __init__(self, data):
-            self._data = data
-        def json(self):
-            return self._data
-        def raise_for_status(self):
-            pass
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"generated_text": "Mocked Step"}
+    mock_response.raise_for_status = MagicMock()
 
-    async def mock_post(url, **kwargs):
-        if url.endswith("/generate"):
-            return MockResponse({"generated_text": "Mocked Step"})
-        return MockResponse({})
+    with patch.object(chainer.client, 'post', return_value=mock_response) as mock_post:
+        # For an AsyncClient, post is async, so we need to return the sync mock object from an async coroutine.
+        mock_post_async = AsyncMock(return_value=mock_response)
+        chainer.client.post = mock_post_async
 
-    chainer.client.post = mock_post
+        steps = ["step1", "step2"]
+        results = await chainer.execute_chain(steps)
 
-    steps = ["step1", "step2"]
-    results = await chainer.execute_chain(steps)
+        assert len(results) == 2
+        assert results[0] == "Mocked Step"
+        assert results[1] == "Mocked Step"
 
-    assert len(results) == 2
-    assert results[0] == "Mocked Step"
-    assert results[1] == "Mocked Step"
-
-    decomposition = await chainer.decompose_task("Complex Goal")
-    assert len(decomposition) == 1 # "Mocked Step"
+        decomposition = await chainer.decompose_task("Complex Goal")
+        assert len(decomposition) == 1 # "Mocked Step"
 
     await chainer.close()

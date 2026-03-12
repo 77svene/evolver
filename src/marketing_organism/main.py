@@ -5,12 +5,22 @@ from src.marketing_organism.agents.lifecycle import AgentManager
 from src.marketing_organism.agents.base import BaseAgent
 from src.marketing_organism.evolution.selection import EvolutionarySelector
 from src.marketing_organism.knowledge.graph import KnowledgeGraph
+from src.marketing_organism.llm.reasoning import PromptChainer
+from src.marketing_organism.tool_forge.generator import ToolGenerator
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger("organism_main")
 
 class OrchestratorAgent(BaseAgent):
     """A baseline agent to handle system orchestration tasks."""
+    def __init__(self, *args, event_bus: EventBus = None, knowledge_graph: KnowledgeGraph = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.event_bus = event_bus
+        self.knowledge_graph = knowledge_graph
+
     async def decide(self):
         # The orchestrator could check system health or DLQ here
         await asyncio.sleep(5)
@@ -23,21 +33,30 @@ class OrchestratorAgent(BaseAgent):
 async def main():
     logger.info("Starting Autonomous Adaptive Marketing Ecosystem Orchestrator...")
 
-    # 1. Initialize Event Bus
+    # 1. Initialize Core Dependencies
     event_bus = EventBus(dlq_max_size=1000)
     event_bus.start()
+    logger.info("Event Bus initialized.")
 
-    # 2. Initialize Knowledge Graph
     knowledge_graph = KnowledgeGraph(in_memory=False, db_path="marketing_organism.db")
-    logger.info("Knowledge Graph initialized.")
+    logger.info("Knowledge Graph (SQLite) initialized.")
 
-    # 3. Initialize Evolution Engine
+    prompt_chainer = PromptChainer(endpoint_url="http://127.0.0.1:8000")
+    tool_generator = ToolGenerator(workspace_path="./generated_tools", prompt_chainer=prompt_chainer)
+    logger.info("Tool Forge and LLM Integration initialized.")
+
     evolution_engine = EvolutionarySelector()
     logger.info("Evolution Engine initialized.")
 
-    # 4. Initialize Agent Manager and spawn baseline agent
+    # 2. Initialize Agent Manager and spawn baseline agent using Dependency Injection
     agent_manager = AgentManager()
-    orchestrator = agent_manager.spawn_agent(OrchestratorAgent, config={"role": "orchestrator"})
+    orchestrator = agent_manager.spawn_agent(
+        OrchestratorAgent,
+        config={"role": "orchestrator"},
+    )
+    # Inject dependencies post-spawn or via a custom factory method in a real system
+    orchestrator.event_bus = event_bus
+    orchestrator.knowledge_graph = knowledge_graph
     logger.info(f"Orchestrator Agent spawned with ID: {orchestrator.agent_id}")
 
     try:

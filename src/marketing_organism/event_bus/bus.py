@@ -1,7 +1,12 @@
 import asyncio
-from typing import Callable, Dict, List
+import logging
 import fnmatch
+from typing import Callable, Dict, List
+
+from src.marketing_organism.exceptions import EventBusError
 from .events import BaseEvent
+
+logger = logging.getLogger(__name__)
 
 class TopicRouter:
     def __init__(self):
@@ -59,22 +64,22 @@ class EventBus:
                                 try:
                                     await callback(t, e)
                                 except Exception as err:
-                                    print(f"Error executing async callback for {t}: {err}")
+                                    logger.error(f"EventBusError: Async callback for {t} failed: {err}", exc_info=True)
                                     try:
                                         self.dlq.put_nowait((t, e, str(err)))
                                     except asyncio.QueueFull:
-                                        pass
+                                        logger.warning("EventBusError: DLQ is full. Dropping failed async event.")
                             tasks.append(asyncio.create_task(safe_cb()))
                         else:
                             # If sync callback, just call it directly
                             try:
                                 cb(topic, event)
-                            except Exception as e:
-                                print(f"Error executing sync callback for {topic}: {e}")
+                            except Exception as err_sync:
+                                logger.error(f"EventBusError: Sync callback for {topic} failed: {err_sync}", exc_info=True)
                                 try:
-                                    self.dlq.put_nowait((topic, event, str(e)))
+                                    self.dlq.put_nowait((topic, event, str(err_sync)))
                                 except asyncio.QueueFull:
-                                    pass
+                                    logger.warning("EventBusError: DLQ is full. Dropping failed sync event.")
 
                     if tasks:
                         await asyncio.gather(*tasks, return_exceptions=True)
@@ -83,12 +88,12 @@ class EventBus:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                print(f"Error in event bus loop: {e}")
+                logger.error(f"EventBusError: Critical failure in event loop: {e}", exc_info=True)
                 # Send totally failed items to DLQ if possible
                 try:
                     self.dlq.put_nowait(("unknown_topic", None, str(e)))
                 except (asyncio.QueueFull, NameError):
-                    pass
+                    logger.warning("EventBusError: Unable to place critical loop failure in DLQ.")
 
     def start(self):
         if not self._running:
